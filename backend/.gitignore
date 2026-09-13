@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+ransomguard.db
+ransomguard.db-wal
+ransomguard.db-shm
+evidence_storage/
