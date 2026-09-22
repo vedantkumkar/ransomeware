@@ -1,0 +1,11 @@
+# Local secrets/config — agent
+config.ini
+detector.log
+detector.log.*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+build/
+dist/
+release/
+*.spec

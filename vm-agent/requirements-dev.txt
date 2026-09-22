@@ -1,0 +1,3 @@
+# Agent runtime has ZERO third-party dependencies (Python stdlib only).
+# Dev/test dependencies only:
+pytest>=7
