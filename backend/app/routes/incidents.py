@@ -3,9 +3,15 @@
 from fastapi import APIRouter, HTTPException
 
 from .. import db, serializers
-from ..schemas import ActionResultOut, EvidenceItemOut, IncidentOut, TimelineEventOut
+from ..schemas import (
+    ActionResultOut,
+    EvidenceItemOut,
+    IncidentOut,
+    ManualCollectionIn,
+    TimelineEventOut,
+)
 from ..services.containment import ContainmentService
-from ..services.evidence_service import EvidenceCollectionService
+from ..services.evidence_service import CollectionError, EvidenceCollectionService
 from ..services.identity import IdentityResponseService
 from ..services.incident_state import IncidentStateService
 
@@ -97,12 +103,22 @@ def suspend_user(incident_id: str) -> ActionResultOut:
 
 
 @router.post("/incidents/{incident_id}/collect-evidence", response_model=ActionResultOut)
-def collect_evidence(incident_id: str) -> ActionResultOut:
+def collect_evidence(incident_id: str,
+                     request: ManualCollectionIn | None = None) -> ActionResultOut:
+    """Manual evidence collection. Creates a REAL artifact from a real source,
+    hashes it, records chain-of-custody, and adds a MANUAL timeline entry.
+    Fails with 400 (no record created) when the source cannot be read."""
     conn = db.get_connection()
     incident = _require_incident(conn, incident_id)
-    evidence_service.collect_analyst(conn, incident, actor=ANALYST)
+    body = request or ManualCollectionIn()
+    try:
+        evidence_id = evidence_service.collect_manual(
+            conn, incident, body.evidence_type, actor=ANALYST,
+            text_content=body.content)
+    except CollectionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ActionResultOut(success=True,
-                           message=f"Evidence collection simulated for {incident_id}")
+                           message=f"Evidence {evidence_id} collected for {incident_id}")
 
 
 @router.post("/incidents/{incident_id}/false-positive", response_model=ActionResultOut)

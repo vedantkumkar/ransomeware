@@ -31,12 +31,20 @@ AgentStatus = Literal["online", "offline", "degraded"]
 NetworkStatus = Literal["connected", "isolated"]
 EvidenceType = Literal[
     "process_snapshot", "file_manifest", "event_logs", "memory_metadata",
-    "network_metadata", "ransom_note", "detection_log",
+    "network_metadata", "ransom_note", "detection_log", "text_artifact",
 ]
 TimelineEventType = Literal["detection", "analysis", "action", "notification", "success", "evidence"]
 ActorType = Literal["automation", "analyst", "agent"]
 ActionResultValue = Literal["success", "failed", "pending"]
-EvidenceIntegrity = Literal["verified", "pending", "failed"]
+# Integrity states: verified = stored artifact matches its recorded SHA-256.
+EvidenceIntegrity = Literal[
+    "verified", "verification_failed", "artifact_missing", "not_verified",
+    "pending", "failed",
+]
+CollectionMethod = Literal["automated", "manual"]
+ManualEvidenceType = Literal[
+    "windows_event_logs", "process_snapshot", "file_manifest", "text_artifact",
+]
 
 
 # ── Ingestion (vm-agent -> backend, snake_case per contract) ─────────────────
@@ -152,6 +160,47 @@ class EvidenceItemOut(CamelModel):
     collected_at: str  # full ISO
     integrity: EvidenceIntegrity
     description: str
+    # Forensic metadata (empty for legacy records where not established).
+    artifact_name: str = ""
+    mime_type: str = ""
+    collection_method: CollectionMethod = "automated"
+    collected_by: str = ""
+    size_bytes: int = 0
+    has_artifact: bool = False
+
+
+class CustodyEntryOut(CamelModel):
+    timestamp: str  # full ISO
+    action: str
+    actor: str = ""
+    detail: str = ""
+
+
+class EvidenceDetailOut(EvidenceItemOut):
+    custody: list[CustodyEntryOut] = []
+
+
+class ArtifactContentOut(CamelModel):
+    """The actual stored artifact behind an evidence record (text-only view)."""
+
+    evidence_id: str
+    artifact_name: str
+    mime_type: str
+    content: str
+    binary_unsupported: bool = False
+
+
+class IntegrityVerificationOut(CamelModel):
+    evidence_id: str
+    integrity: EvidenceIntegrity
+    message: str
+
+
+class ManualCollectionIn(CamelModel):
+    """Body of POST /api/incidents/{id}/collect-evidence (optional; legacy callers omit it)."""
+
+    evidence_type: ManualEvidenceType = "windows_event_logs"
+    content: str = ""
 
 
 class ActivityLogEntryOut(CamelModel):
@@ -199,3 +248,10 @@ class DashboardDataOut(CamelModel):
 class ActionResultOut(CamelModel):
     success: bool
     message: str
+
+
+class NotificationReadResultOut(CamelModel):
+    """Result of notification read actions (read status is persisted)."""
+
+    updated: int
+    unread: int

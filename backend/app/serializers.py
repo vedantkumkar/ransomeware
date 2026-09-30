@@ -6,6 +6,7 @@ import sqlite3
 from .schemas import (
     AlertOut,
     ActivityLogEntryOut,
+    CustodyEntryOut,
     EndpointOut,
     EvidenceItemOut,
     IncidentOut,
@@ -70,6 +71,7 @@ def endpoint_from_row(row: sqlite3.Row) -> EndpointOut:
 
 
 def evidence_from_row(row: sqlite3.Row) -> EvidenceItemOut:
+    storage_path = row["storage_path"] if "storage_path" in row.keys() else ""
     return EvidenceItemOut(
         id=row["id"],
         incident_id=row["incident_id"],
@@ -80,6 +82,21 @@ def evidence_from_row(row: sqlite3.Row) -> EvidenceItemOut:
         collected_at=row["collected_at"],
         integrity=row["integrity"],
         description=row["description"],
+        artifact_name=row["artifact_name"] if "artifact_name" in row.keys() else "",
+        mime_type=row["mime_type"] if "mime_type" in row.keys() else "",
+        collection_method=row["collection_method"] if "collection_method" in row.keys() else "automated",
+        collected_by=row["collected_by"] if "collected_by" in row.keys() else "",
+        size_bytes=row["size_bytes"] if "size_bytes" in row.keys() else 0,
+        has_artifact=bool(storage_path),
+    )
+
+
+def custody_from_row(row: sqlite3.Row) -> CustodyEntryOut:
+    return CustodyEntryOut(
+        timestamp=row["timestamp"],
+        action=row["action"],
+        actor=row["actor"],
+        detail=row["detail"],
     )
 
 

@@ -105,7 +105,26 @@ CREATE TABLE IF NOT EXISTS identity_state (
     sessions_revoked INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS evidence_custody (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    evidence_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    action TEXT NOT NULL,
+    actor TEXT NOT NULL DEFAULT '',
+    detail TEXT NOT NULL DEFAULT ''
+);
 """
+
+# Columns added after the initial release; applied to existing databases via
+# _migrate() so older demo databases keep working without a rebuild.
+EVIDENCE_ADDED_COLUMNS = [
+    ("artifact_name", "TEXT NOT NULL DEFAULT ''"),
+    ("mime_type", "TEXT NOT NULL DEFAULT ''"),
+    ("collection_method", "TEXT NOT NULL DEFAULT 'automated'"),
+    ("collected_by", "TEXT NOT NULL DEFAULT ''"),
+    ("size_bytes", "INTEGER NOT NULL DEFAULT 0"),
+]
 
 # Demo identity seeded on startup when the endpoints table is empty.
 SEED_HOSTNAME = "VICTIM-PC-01"
@@ -134,10 +153,19 @@ def get_connection() -> sqlite3.Connection:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(SCHEMA)
+            _migrate(conn)
             conn.commit()
             _conn = conn
             _conn_path = path
         return _conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply additive migrations to databases created by older versions."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(evidence)")}
+    for name, declaration in EVIDENCE_ADDED_COLUMNS:
+        if name not in columns:
+            conn.execute(f"ALTER TABLE evidence ADD COLUMN {name} {declaration}")
 
 
 def reset_connection() -> None:
@@ -221,3 +249,12 @@ def insert_notification(conn: sqlite3.Connection, *, ts_dt, title: str,
             (notification_id, title, description, severity,
              timeutil.short_time(ts_dt), incident_id))
     return notification_id
+
+
+def append_custody(conn: sqlite3.Connection, evidence_id: str, *, ts_dt,
+                   action: str, actor: str = "", detail: str = "") -> None:
+    """Record one chain-of-custody entry for an evidence item."""
+    execute(conn,
+            "INSERT INTO evidence_custody (evidence_id, timestamp, action, actor, detail)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (evidence_id, timeutil.iso_z(ts_dt), action, actor, detail))
