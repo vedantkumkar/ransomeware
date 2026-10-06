@@ -1,0 +1,72 @@
+# Deploys the RansomGuard IR frontend to GitHub Pages.
+#
+# - The repository name is read automatically (no hardcoding): the Vite base
+#   path becomes /<repo-name>/ and index.html is copied to 404.html so
+#   BrowserRouter deep links (e.g. /incidents) work on GitHub Pages.
+# - Default build is MOCK MODE (self-contained demo, no backend needed).
+#   For a live-backend build set these repository variables
+#   (Settings -> Secrets and variables -> Actions -> Variables):
+#       FRONTEND_USE_MOCK_API = false
+#       BACKEND_PUBLIC_URL    = https://your-deployed-backend.example.com
+#
+# One-time setup: Settings -> Pages -> Build and deployment -> Source:
+# "GitHub Actions".
+
+name: Deploy frontend to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["frontend/**", ".github/workflows/deploy-frontend.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (base path + mode from repository variables)
+        env:
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_USE_MOCK_API: ${{ vars.FRONTEND_USE_MOCK_API || 'true' }}
+          VITE_API_BASE_URL: ${{ vars.BACKEND_PUBLIC_URL || 'http://localhost:8000' }}
+        run: npm run build
+
+      - name: SPA fallback for GitHub Pages (BrowserRouter deep links)
+        run: cp dist/index.html dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
